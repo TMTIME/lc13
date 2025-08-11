@@ -1,50 +1,45 @@
 /obj/machinery/conveyor/filter
 	icon = 'icons/obj/recycling.dmi'
-	icon_state = "filter_codersprite0"
-	name = "conveyor point filter"
-	desc = "A filter that checks for factory materials. Matches get sent north."
-	var/filter_type = "ALL"
-	var/filter_typepath = /obj/item/factoryitem
-	var/filter_output_dir = NORTH
-	var/lazyhackyoutputdir = WEST
+	icon_state = "filter_generic_off" // todo: sprite or something ah
+	name = "conveyor filter"
+	desc = "A filter that checks for specific items."
+	var/filter_object_name = "Nothing"
+	var/filter_typepath = null
+	var/filter_icon_path = null
+	var/filter_icon_state = null
+	var/filter_output_dir = SOUTH
+	var/unfiltered_output_dir = EAST
 
-/obj/machinery/conveyor/filter/update_move_direction()
-	update()
-
+/obj/machinery/conveyor/filter/Initialize()
+	update_desc()
+	. = ..()
+	
 /obj/machinery/conveyor/filter/update_icon_state()
-	icon_state = "filter_codersprite[abs(operating)]"
+	cut_overlays()
+	add_overlay(icon('icons/obj/conveyor_filters.dmi', "filter_[filter_output_dir]"))
+	add_overlay(icon('icons/obj/conveyor_filters.dmi', "unfiltered_[unfiltered_output_dir]"))
+	if(filter_typepath)
+		var/image/I = image(icon(filter_icon_path, filter_icon_state))
+		I.transform *= 0.5
+		add_overlay(I)
 
-/obj/machinery/conveyor/filter/proc/cycle_type_paths()
-	switch(filter_typepath)
-		if(/obj/item/factoryitem)
-			filter_typepath = /obj/item/factoryitem/red
-			color = "#ff0000"
-			filter_type = "RED"
-		if(/obj/item/factoryitem/red)
-			filter_typepath = /obj/item/factoryitem/green
-			color = "#00ff00"
-			filter_type = "GREEN"
-		if(/obj/item/factoryitem/green)
-			filter_typepath = /obj/item/factoryitem/blue
-			color = "#0000ff"
-			filter_type = "BLUE"
-		if(/obj/item/factoryitem/blue)
-			filter_typepath = /obj/item/factoryitem/purple
-			color = "#aa00ff"
-			filter_type = "PURPLE"
-		if(/obj/item/factoryitem/purple)
-			filter_typepath = /obj/item/factoryitem/orange
-			color = "#ffaa00"
-			filter_type = "ORANGE"
-		if(/obj/item/factoryitem/orange)
-			filter_typepath = /obj/item/factoryitem/silver
-			color = "#aaaaff"
-			filter_type = "SILVER"
-		if(/obj/item/factoryitem/silver)
-			filter_typepath = /obj/item/factoryitem
-			color = ""
-			filter_type = "ALL"
-	return filter_type
+
+/obj/machinery/conveyor/filter/proc/update_desc()
+	desc = "A filter that checks for specific objects and redirects them in another direction.\nMatches get sent [dir2text(filter_output_dir)], everything else goes [dir2text(unfiltered_output_dir)].\nA screwdriver changes the output direction of filtered items, while a wrench changes the output direction of everything else."
+	if(!filter_typepath)
+		desc += "\nIt currently has no set filter! The first object to move onto it will be filtered."
+	else:
+		desc += "\nIt is set to filter out [filter_object_name]. The filter can be cleared with wirecutters."
+
+/obj/machinery/conveyor/filter/proc/get_it_twisted(var/angle)
+	switch(angle)
+		if(NORTH)
+			return EAST
+		if(EAST)
+			return SOUTH
+		if(SOUTH)
+			return WEST
+	return NORTH
 
 /obj/machinery/conveyor/filter/convey(list/affecting)
 	for(var/am in affecting)
@@ -61,10 +56,22 @@
 			if((zoommob.movement_type & FLYING) && !zoommob.stat)
 				continue
 		if(!movable_thing.anchored && movable_thing.has_gravity())
-			if(istype(movable_thing, filter_typepath))
+			if(!filter_typepath) // Set the filter to the first object that moves over it
+				if(istype(movable_thing, /mob/living/carbon/human)) // Otherwise it'll use the name of the person who walks over it
+					filter_object_name = "people"
+					filter_icon_state = "human_basic"
+				else
+					filter_object_name = movable_thing.name
+					filter_icon_state = movable_thing.icon_state
+				filter_typepath = movable_thing.type
+				filter_icon_path = movable_thing.icon
+				update_desc()
+				update_icon_state()
+				playsound(src, 'sound/machines/ping.ogg', 50)
+			if(movable_thing.type == filter_typepath)
 				step(movable_thing, filter_output_dir)
 			else
-				step(movable_thing, lazyhackyoutputdir)
+				step(movable_thing, unfiltered_output_dir)
 	conveying = FALSE
 
 /obj/machinery/conveyor/filter/attackby(obj/item/I, mob/user, params)
@@ -78,26 +85,33 @@
 			to_chat(user, "<span class='notice'>You remove the conveyor belt.</span>")
 			qdel(src)
 
-	else if(I.tool_behaviour == TOOL_WRENCH)
+	else if(I.tool_behaviour == TOOL_WRENCH) // rotate the output direction if the item does not match
 		if(!(machine_stat & BROKEN))
 			I.play_tool_sound(src)
-			//Rotate code here lol
-			var/newcolor = cycle_type_paths()
-			to_chat(user, "<span class='notice'>You cycle the filter type. It now filters for [newcolor].</span>")
+			unfiltered_output_dir = get_it_twisted(unfiltered_output_dir)
+			update_icon_state()
+			to_chat(user, "<span class='notice'>You alter the filter so unfiltered items are sent [dir2text(unfiltered_output_dir)].</span>")
 
-	else if(I.tool_behaviour == TOOL_SCREWDRIVER)
+	else if(I.tool_behaviour == TOOL_SCREWDRIVER) // rotate the output direction if the item does match
 		if(!(machine_stat & BROKEN))
 			I.play_tool_sound(src)
-			//Direction reverse code here lol
-			to_chat(user, "<span class='notice'>Sorry not implemented yet :-)</span>")
+			filter_output_dir = get_it_twisted(filter_output_dir)
+			update_icon_state()
+			to_chat(user, "<span class='notice'>You alter the filter so filtered items are sent [dir2text(filter_output_dir)].</span>")
+
+	else if(I.tool_behaviour == TOOL_WIRECUTTER) // reset the filtered object
+		user.visible_message("<span class='notice'>[user] attempts to reset \the [src].</span>", \
+		"<span class='notice'>You attempt to reset \the [src].</span>")
+		if(I.use_tool(src, user, 20, volume=40)) // help prevent misclicks	
+			filter_typepath = null
+			filter_object_name = "Nothing"
+			update_desc()
+			update_icon_state()
+			to_chat(user, "<span class='notice'>You clear the filtered item. The next item to pass into the filter will be filtered.</span>")
 
 	else if(user.a_intent != INTENT_HARM)
 		user.transferItemToLoc(I, drop_location())
 
-	// TODO: probably a good idea to add multitool support & tgui, esp. for changing ratios
-
-	else
-		return ..()
 
 /obj/item/stack/conveyor_filter
 	name = "conveyor filter assembly"
