@@ -95,19 +95,6 @@
 	else if(user.a_intent != INTENT_HARM)
 		user.transferItemToLoc(I, drop_location())
 
-
-/* 
-/obj/machinery/conveyor/filter/attack_hand(mob/user) // select a new filter
-	a = typecacheof(/datum/filter_setting/)
-	for (var/_smite_path in subtypesof(/datum/smite))
-	var/datum/smite/smite_path = _smite_path
-
-	
-				update_desc()
-				update_icon_state()
-				playsound(src, 'sound/machines/ping.ogg', 50)
- */
-
 /obj/machinery/conveyor/filter/ui_interact(mob/user)
 	. = ..()
 	var/dat
