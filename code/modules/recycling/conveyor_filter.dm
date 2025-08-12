@@ -3,10 +3,8 @@
 	icon_state = "filter_generic_off" // todo: sprite or something ah
 	name = "conveyor filter"
 	desc = "A filter that checks for specific items."
+	var/datum/filter_setting/selected_filter = null
 	var/filter_object_name = "Nothing"
-	var/filter_typepath = null
-	var/filter_icon_path = null
-	var/filter_icon_state = null
 	var/filter_output_dir = SOUTH
 	var/unfiltered_output_dir = EAST
 
@@ -18,18 +16,18 @@
 	cut_overlays()
 	add_overlay(icon('icons/obj/conveyor_filters.dmi', "filter_[filter_output_dir]"))
 	add_overlay(icon('icons/obj/conveyor_filters.dmi', "unfiltered_[unfiltered_output_dir]"))
-	if(filter_typepath)
-		var/image/I = image(icon(filter_icon_path, filter_icon_state))
-		I.transform *= 0.5
-		add_overlay(I)
+	// if(filter_typepath) // todo:get this back in bc it was neat
+	// 	var/image/I = image(icon(filter_icon_path, filter_icon_state))
+	// 	I.transform *= 0.5
+	// 	add_overlay(I)
 
 
 /obj/machinery/conveyor/filter/proc/update_desc()
 	desc = "A filter that checks for specific objects and redirects them in another direction.\nMatches get sent [dir2text(filter_output_dir)], everything else goes [dir2text(unfiltered_output_dir)].\nA screwdriver changes the output direction of filtered items, while a wrench changes the output direction of everything else."
-	if(!filter_typepath)
+	if(!selected_filter)
 		desc += "\nIt currently has no set filter! The first object to move onto it will be filtered."
 	else:
-		desc += "\nIt is set to filter out [filter_object_name]. The filter can be cleared with wirecutters."
+		desc += "\nIt is set to filter out [selected_filter.name]. The filter can be cleared with wirecutters."
 
 /obj/machinery/conveyor/filter/proc/get_it_twisted(var/angle)
 	switch(angle)
@@ -56,21 +54,14 @@
 			if((zoommob.movement_type & FLYING) && !zoommob.stat)
 				continue
 		if(!movable_thing.anchored && movable_thing.has_gravity())
-			if(!filter_typepath) // Set the filter to the first object that moves over it
-				if(istype(movable_thing, /mob/living/carbon/human)) // Otherwise it'll use the name of the person who walks over it
-					filter_object_name = "people"
-					filter_icon_state = "human_basic"
-				else
-					filter_object_name = movable_thing.name
-					filter_icon_state = movable_thing.icon_state
-				filter_typepath = movable_thing.type
-				filter_icon_path = movable_thing.icon
-				update_desc()
-				update_icon_state()
-				playsound(src, 'sound/machines/ping.ogg', 50)
-			if(movable_thing.type == filter_typepath)
-				step(movable_thing, filter_output_dir)
-			else
+			var/unfiltered = TRUE
+			if(selected_filter)
+				for(var/filter in selected_filter.filter_typepath)
+					if(movable_thing.type == filter)
+						step(movable_thing, filter_output_dir)
+						unfiltered = FALSE
+						break
+			if(unfiltered)				
 				step(movable_thing, unfiltered_output_dir)
 	conveying = FALSE
 
@@ -79,6 +70,8 @@
 		user.visible_message("<span class='notice'>[user] struggles to pry up \the [src] with \the [I].</span>", \
 		"<span class='notice'>You struggle to pry up \the [src] with \the [I].</span>")
 		if(I.use_tool(src, user, 40, volume=40))
+			if(selected_filter)
+				qdel(selected_filter)
 			if(!(machine_stat & BROKEN))
 				var/obj/item/stack/conveyor_filter/C = new /obj/item/stack/conveyor_filter(loc, 1, TRUE, null, null, id)
 				transfer_fingerprints_to(C)
@@ -99,19 +92,76 @@
 			update_icon_state()
 			to_chat(user, "<span class='notice'>You alter the filter so filtered items are sent [dir2text(filter_output_dir)].</span>")
 
-	else if(I.tool_behaviour == TOOL_WIRECUTTER) // reset the filtered object
-		user.visible_message("<span class='notice'>[user] attempts to reset \the [src].</span>", \
-		"<span class='notice'>You attempt to reset \the [src].</span>")
-		if(I.use_tool(src, user, 20, volume=40)) // help prevent misclicks	
-			filter_typepath = null
-			filter_object_name = "Nothing"
-			update_desc()
-			update_icon_state()
-			to_chat(user, "<span class='notice'>You clear the filtered item. The next item to pass into the filter will be filtered.</span>")
-
 	else if(user.a_intent != INTENT_HARM)
 		user.transferItemToLoc(I, drop_location())
 
+
+/* 
+/obj/machinery/conveyor/filter/attack_hand(mob/user) // select a new filter
+	a = typecacheof(/datum/filter_setting/)
+	for (var/_smite_path in subtypesof(/datum/smite))
+	var/datum/smite/smite_path = _smite_path
+
+	
+				update_desc()
+				update_icon_state()
+				playsound(src, 'sound/machines/ping.ogg', 50)
+ */
+
+/obj/machinery/conveyor/filter/ui_interact(mob/user)
+	. = ..()
+	var/dat
+	if(selected_filter)
+		dat = "<b>Current filter:</b> " + selected_filter.name + "<br>"
+	else
+		dat = "<b>Current filter:</b> None<br>"
+	dat += {"<div style="float:left; width:20%">
+			<b>Materials</b><br>"}
+	for(var/filter in subtypesof(/datum/filter_setting/material))
+		var/datum/filter_setting/fs = new filter()
+		dat += "<A href='byond://?src=[REF(src)];set_filter=[fs.type]'>[fs.name]</A> <br>"
+	dat += {"</div>
+			<div style="float:left; width:20%">
+			<b>Low Tier Factories</b><br>"}
+	for(var/filter in subtypesof(/datum/filter_setting/low))
+		var/datum/filter_setting/fs = new filter()
+		dat += "<A href='byond://?src=[REF(src)];set_filter=[fs.type]'>[fs.name]</A> <br>"
+	dat += {"</div>
+			<div style="float:left; width:20%">
+			<b>Medium Tier Factories</b><br>"}
+	for(var/filter in subtypesof(/datum/filter_setting/medium))
+		var/datum/filter_setting/fs = new filter()
+		dat += "<A href='byond://?src=[REF(src)];set_filter=[fs.type]'>[fs.name]</A> <br>"
+	dat += {"</div>
+			<div style="float:left; width:20%">
+			<b>High Tier Factories</b><br>"}
+	for(var/filter in subtypesof(/datum/filter_setting/high))
+		var/datum/filter_setting/fs = new filter()
+		dat += "<A href='byond://?src=[REF(src)];set_filter=[fs.type]'>[fs.name]</A> <br>"
+	dat += {"</div>
+			<div style="float:left; width:20%">
+			<b>Misc</b><br>"}
+	for(var/filter in subtypesof(/datum/filter_setting/misc))
+		var/datum/filter_setting/fs = new filter()
+		dat += "<A href='byond://?src=[REF(src)];set_filter=[fs.type]'>[fs.name]</A> <br>"
+	dat += "</div>"
+	var/datum/browser/popup = new(user, "conveyor_filter_settings", "Filter Settings", 1200, 700)
+	popup.set_content(dat)
+	popup.open()
+
+/obj/machinery/conveyor/filter/Topic(href, href_list)
+	. = ..()
+	if(.)
+		return .
+	if(ishuman(usr))
+		usr.set_machine(src)
+		if(selected_filter)
+			qdel(selected_filter)
+		var/newfilter = href_list["set_filter"]
+		if(newfilter)
+			selected_filter = new newfilter()
+	add_fingerprint(usr)
+	updateUsrDialog()
 
 /obj/item/stack/conveyor_filter
 	name = "conveyor filter assembly"
