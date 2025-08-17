@@ -43,10 +43,10 @@ GLOBAL_LIST_INIT(attribute_types, list(
 // Used in show_attributes() human proc
 // Returns current level + initial_stat_value, placed next to information such as modifiers
 // Mainly used by fortitude & prudence
-/datum/attribute/proc/get_printed_level_bonus(mob/living/carbon/refrence_user)
+/datum/attribute/proc/get_printed_level_bonus()
 	return round(level) + initial_stat_value
 
-/datum/attribute/proc/on_update(mob/living/carbon/user)
+/datum/attribute/proc/on_update(mob/living/carbon/human/user)
 	return
 
 /datum/attribute/proc/adjust_level(mob/living/carbon/human/user, addition)
@@ -107,6 +107,15 @@ GLOBAL_LIST_INIT(attribute_types, list(
 	if(!istype(atr))
 		return 0
 	return max(0, atr.get_modified_level())
+
+// Gets the printed level bonus, useful for max HP and SP
+/proc/get_attribute_printed_level_bonus(mob/living/carbon/human/user, attribute)
+	if(!istype(user) || !attribute)
+		return 0
+	var/datum/attribute/atr = user.attributes[attribute]
+	if(!istype(atr))
+		return 0
+	return max(0, atr.get_printed_level_bonus())
 
 //Getting raw level, mostly for tools.
 /proc/get_raw_level(mob/living/carbon/human/user, attribute)

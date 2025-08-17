@@ -4,8 +4,9 @@
 	affected_stats = list("Max Sanity")
 	initial_stat_value = DEFAULT_HUMAN_MAX_SANITY
 
-/datum/attribute/prudence/get_printed_level_bonus(mob/living/carbon/refrence_user)
-	var/modifier = (SSmaptype.chosen_trait == FACILITY_TRAIT_XP_MOD ? 1.7 : PRUDENCE_MOD)
-	if(refrence_user)
-		return refrence_user.getRawMaxSanity() + round(level * modifier)
-	return round(level * modifier) + initial_stat_value
+/datum/attribute/prudence/get_printed_level_bonus()
+	return round(level * (PRUDENCE_MOD ? PRUDENCE_MOD : 1)) + initial_stat_value
+
+/datum/attribute/prudence/on_update(mob/living/carbon/human/user)
+	. = ..()
+	initial_stat_value = SSmaptype.chosen_trait == FACILITY_TRAIT_XP_MOD ? DEFAULT_HUMAN_MAX_SANITY_XP : DEFAULT_HUMAN_MAX_SANITY
